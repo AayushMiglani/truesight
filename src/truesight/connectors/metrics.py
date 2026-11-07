@@ -2,6 +2,10 @@
 Each `[[metrics]]` entry in truesight.toml is one series; it attaches to an Investigation
 when one of its `services` is on the path. Logs say what failed; metrics say what was saturated."""
 
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from truesight.config import Config
@@ -9,13 +13,13 @@ from truesight.model import Evidence
 
 POINTS_BEFORE = 12  # enough history to show a baseline
 POINTS_AFTER = 4
+MAX_SERIES = 3
 RISE = 1.5  # ponytail: fixed "it went up" threshold; per-metric when a flat-but-bad series gets missed
 
 
 def period_for(age: timedelta) -> int:
-    """CloudWatch keeps 1-min data 15 days, 5-min 63 days, 1-hour 455 days."""
-    if age < timedelta(days=14):
-        return 60
+    """5 min (~30 points per window: the shape, without bloating the ledger), or 1 hour past
+    CloudWatch's 63-day 5-min retention. Use a Maximum stat so short spikes survive."""
     if age < timedelta(days=62):
         return 300
     return 3600
@@ -45,7 +49,19 @@ def summarise(points: list[tuple[datetime, float]], at: datetime) -> list[str]:
 
 
 def specs_for(cfg: Config, services: set[str]) -> list[dict]:
-    return [m for m in cfg.metrics if services & set(m.get("services", []))]
+    """Specs whose services are on the path. `services = ["*"]` matches every path service.
+    A spec with `{service}` in its query or title expands to one series per matching service."""
+    out = []
+    for spec in cfg.metrics:
+        wanted = spec.get("services", [])
+        matched = sorted(services if "*" in wanted else services & set(wanted))
+        templated = any("{service}" in str(spec.get(k, "")) for k in ("query", "title"))
+        if templated:
+            out += [{k: v.replace("{service}", svc) if isinstance(v, str) else v for k, v in spec.items()}
+                    for svc in matched]
+        elif matched:
+            out.append(spec)
+    return out
 
 
 def cloudwatch_series(cfg: Config, spec: dict, at: datetime, now: datetime) -> Evidence:
@@ -77,8 +93,46 @@ def cloudwatch_series(cfg: Config, spec: dict, at: datetime, now: datetime) -> E
     )
 
 
+def prometheus_series(cfg: Config, spec: dict, at: datetime, now: datetime) -> Evidence:
+    """PromQL range query against any Prometheus-compatible API (direct, or a Grafana datasource proxy)."""
+    prom = cfg.raw.get("prometheus", {})
+    if not prom.get("url"):
+        raise ValueError("[prometheus] url is not set in truesight.toml")
+    step = period_for(now - at)
+    start, end = window(at, step)
+    params = urllib.parse.urlencode({"query": spec["query"], "start": start.timestamp(),
+                                     "end": end.timestamp(), "step": step})
+    req = urllib.request.Request(prom["url"].rstrip("/") + "/api/v1/query_range?" + params)
+    if prom.get("token_env"):
+        req.add_header("Authorization", f"Bearer {cfg.secret(prom['token_env'])}")
+    try:
+        with urllib.request.urlopen(req, timeout=prom.get("timeout_seconds", 30)) as resp:
+            body = json.load(resp)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Prometheus {e.code}: {e.read()[:200]!r}") from e
+    series = body.get("data", {}).get("result", [])
+    lines = [] if series else ["no datapoints in the window (beyond retention, or the query matched nothing)"]
+    for s in series[:MAX_SERIES]:
+        labels = ",".join(f"{k}={v}" for k, v in s["metric"].items() if k != "__name__")
+        points = [(datetime.fromtimestamp(t, timezone.utc), float(v)) for t, v in s["values"]]
+        lines += ([f"series {{{labels}}}"] if labels or len(series) > 1 else []) + summarise(points, at)
+    if len(series) > MAX_SERIES:
+        lines.append(f"... {len(series) - MAX_SERIES} more series; aggregate the query (max/sum) to see them")
+    return Evidence(
+        source="prometheus",
+        kind="metric",
+        title=spec.get("title") or spec["query"],
+        query=f"{spec['query']} step {step}s",
+        start=start,
+        end=end,
+        snapshot=tuple(lines),
+    )
+
+
 def fetch(cfg: Config, spec: dict, at: datetime, now: datetime) -> Evidence:
     source = spec.get("source", "cloudwatch")
     if source == "cloudwatch":
         return cloudwatch_series(cfg, spec, at, now)
+    if source == "prometheus":
+        return prometheus_series(cfg, spec, at, now)
     raise ValueError(f"unknown metrics source {source!r}")

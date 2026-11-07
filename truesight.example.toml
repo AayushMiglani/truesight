@@ -28,7 +28,20 @@ lookback_hours = 24
 # Any LiteLLM model string, e.g. anthropic/claude-sonnet-5-5, deepseek/deepseek-chat, ollama/llama3.
 model = "anthropic/claude-sonnet-5-5"
 
-# Metric series, attached when one of `services` is on the request path.
+[prometheus]
+# Any Prometheus-compatible API: Prometheus itself, or a Grafana datasource proxy
+# (https://grafana.example.com/api/datasources/proxy/uid/<datasource-uid>).
+url = "http://prometheus.example.internal:9090"
+token_env = "GRAFANA_TOKEN"   # optional bearer token
+
+# Metric series, attached when one of `services` is on the request path ("*" = every path service).
+# A `{service}` in query or title expands to one series per path service.
+[[metrics]]
+services = ["*"]
+source = "prometheus"
+query = 'max(hikaricp_connections_pending{service="{service}"})'
+title = "{service} threads waiting for a DB connection"
+
 [[metrics]]
 services = ["orders", "payments"]
 source = "cloudwatch"

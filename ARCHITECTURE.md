@@ -15,7 +15,7 @@ truesight investigate <sentry-url | sentry:ID> [--at T]     (or MCP: truesight m
   │                                 → one Evidence per image bump or config change; image bumps list
   │                                   the code commits shipped (+ diffs touching the service)
   │                                 → one Evidence of runtime knobs as deployed (JVM, pools, timeouts)
-  │    4. connectors/metrics.py     each [[metrics]] series whose services are on the path, around
+  │    4. connectors/metrics.py     each [[metrics]] series (CloudWatch or PromQL) whose services are on the path, around
   │                                 the Trigger: early baseline, peak, when it first rose
   │    every snapshot passes redact.py; every failure becomes a Gap, never a crash
   │
@@ -44,6 +44,5 @@ Defaults, not final answers. Each is revisited when evaluation on a set of real 
 ## Not built yet (in order)
 
 1. Automated golden-set scoring, and a comparison with HolmesGPT.
-2. Prometheus metrics Evidence (CloudWatch metrics are in).
-3. Triggers beyond Sentry: Grafana alert, CloudWatch alarm.
-4. Datadog connector.
+2. Triggers beyond Sentry: Grafana alert, CloudWatch alarm.
+3. Datadog connector.

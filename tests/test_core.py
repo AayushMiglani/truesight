@@ -185,6 +185,17 @@ def test_metric_summary_shows_baseline_and_peak():
     lines = metrics.summarise(pts, T)
     assert lines[0] == "early-window baseline 40 · peak 100 at 08-19 18:13 UTC · min 40 · first ≥1.5x baseline at 08-19 18:13 UTC"
     assert metrics.summarise([], T) == ["no datapoints in the window"]
-    assert metrics.period_for(timedelta(days=81)) == 3600 and metrics.period_for(timedelta(days=1)) == 60
+    assert metrics.period_for(timedelta(days=81)) == 3600 and metrics.period_for(timedelta(days=1)) == 300
     cfg = Config({"sentry": {}, "metrics": [{"services": ["ledger"], "metric": "CPU"}, {"services": ["web"], "metric": "x"}]})
     assert [m["metric"] for m in metrics.specs_for(cfg, {"ledger", "accounts"})] == ["CPU"]
+
+
+def test_templated_metric_spec_expands_per_path_service():
+    from truesight.connectors import metrics
+    cfg = Config({"sentry": {}, "metrics": [
+        {"services": ["*"], "source": "prometheus", "query": 'max(pool{service="{service}"})', "title": "{service} pool"},
+        {"services": ["web"], "source": "prometheus", "query": 'max(pool{service="{service}"})'},
+    ]})
+    specs = metrics.specs_for(cfg, {"ledger", "accounts"})
+    assert [(s["query"], s["title"]) for s in specs] == [
+        ('max(pool{service="accounts"})', "accounts pool"), ('max(pool{service="ledger"})', "ledger pool")]
