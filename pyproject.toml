@@ -3,6 +3,8 @@ name = "truesight"
 version = "0.1.0"
 description = "Investigates production errors on your own infrastructure and reports what happened, with Evidence behind every claim."
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["boto3>=1.35", "litellm>=1.50"]
 
 [project.scripts]
