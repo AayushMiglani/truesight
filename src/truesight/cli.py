@@ -29,7 +29,13 @@ def main(argv: list[str] | None = None) -> int:
     inv.add_argument("--config", default="truesight.toml")
     inv.add_argument("--no-llm", action="store_true", help="gather Evidence only; nothing goes to a model")
     inv.add_argument("--json", action="store_true")
+    srv = sub.add_parser("mcp", help="serve the investigate tool to an MCP client over stdio")
+    srv.add_argument("--config", default="truesight.toml")
     args = p.parse_args(argv)
+    if args.cmd == "mcp":
+        from truesight.mcp_server import serve  # deferred: MCP SDK only needed here
+        serve(args.config)
+        return 0
     if bool(args.ref) == bool(args.from_ledger):
         p.error("give exactly one of: a Trigger ref, or --from-ledger")
 

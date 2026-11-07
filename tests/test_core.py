@@ -169,3 +169,11 @@ def test_saved_report_round_trips_to_the_same_ledger():
     ev = (Evidence("sentry", "issue", "LEDGER-5Y", "q", T, T, ("line",), "https://x", 1, "E1"),)
     report = enforce({"headline": "h", "summary": "s", "findings": []}, TRIGGER, ev, ())
     assert ledger_from_json(as_json(report)) == (TRIGGER, ev, ())
+
+
+def test_mcp_investigate_turns_config_exit_into_tool_error(tmp_path):
+    import pytest
+    from truesight.mcp_server import investigate
+    from mcp.server.mcpserver.exceptions import ToolError
+    with pytest.raises(ToolError, match="config not found"):
+        investigate(tmp_path / "missing.toml", "sentry:X-1")

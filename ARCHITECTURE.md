@@ -5,7 +5,7 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md).
 ## Flow
 
 ```
-truesight investigate <sentry-url | sentry:ID> [--at T]
+truesight investigate <sentry-url | sentry:ID> [--at T]     (or MCP: truesight mcp → tool `investigate`)
   │
   ├─ gather.py          deterministic, no model involved
   │    1. connectors/sentry.py      Trigger + event → Evidence, correlation IDs (request_id)
@@ -44,5 +44,4 @@ Defaults, not final answers. Each is revisited when evaluation on a set of real 
 1. Automated golden-set scoring, and a comparison with HolmesGPT.
 2. Metrics Evidence (Prometheus / CloudWatch metrics) for the path services.
 3. Triggers beyond Sentry: Grafana alert, CloudWatch alarm.
-4. MCP surface: one `investigate` tool returning the same Report JSON.
-5. Datadog connector.
+4. Datadog connector.

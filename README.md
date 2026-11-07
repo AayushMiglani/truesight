@@ -30,6 +30,18 @@ truesight investigate sentry:API-1AZ --json > report.json
 truesight investigate --from-ledger report.json                                                   # rerun synthesis on saved Evidence (works after Sentry/log retention expires)
 ```
 
+## Use from an MCP client (Claude Code, Cursor, ...)
+
+`truesight mcp` serves one tool, `investigate(ref, at?, evidence_only?)`, over stdio. It returns the same Report JSON as `--json`.
+
+```sh
+claude mcp add truesight \
+  -e SENTRY_AUTH_TOKEN=... -e ANTHROPIC_API_KEY=... -e AWS_PROFILE=prod \
+  -- truesight mcp --config /absolute/path/to/truesight.toml
+```
+
+Then ask: "investigate https://your-org.sentry.io/issues/API-1AZ/". An investigation takes 30 to 120 seconds.
+
 What it expects of your stack (v0):
 
 - Sentry events carry a request ID (tag or extra) that also appears in your service logs.

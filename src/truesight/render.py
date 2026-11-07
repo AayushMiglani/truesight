@@ -71,7 +71,11 @@ def ledger(trigger: Trigger, evidence: tuple[Evidence, ...], gaps: tuple[Gap, ..
 
 
 def as_json(obj) -> str:
-    return json.dumps(asdict(obj), indent=2, default=str, ensure_ascii=False)
+    return as_json_value(asdict(obj))
+
+
+def as_json_value(value) -> str:
+    return json.dumps(value, indent=2, default=str, ensure_ascii=False)
 
 
 def ledger_from_json(text: str) -> tuple[Trigger, tuple[Evidence, ...], tuple[Gap, ...]]:

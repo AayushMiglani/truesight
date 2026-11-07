@@ -5,7 +5,11 @@ description = "Investigates production errors on your own infrastructure and rep
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["boto3>=1.35", "litellm>=1.50"]
+dependencies = [
+    "boto3>=1.35",
+    "litellm>=1.50",
+    "mcp>=2.3,<3",
+]
 
 [project.scripts]
 truesight = "truesight.cli:main"
