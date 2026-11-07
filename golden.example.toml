@@ -1,0 +1,15 @@
+# Past incidents with a known root cause, for `truesight eval golden.toml`.
+# Keep your real one out of version control: it describes your production.
+
+[[incident]]
+name = "bad-deploy"
+ref = "sentry:API-1AZ"
+at = "2026-10-23T11:30Z"            # anchor on the event nearest this time
+cause = "PR #123 (image abc12345, deployed 11:02 UTC) stopped setting userId, so calls to the cards service had an empty path segment and got 404."
+
+[[incident]]
+name = "pool-exhaustion"
+ref = "sentry:LEDGER-5Y"
+at = "2026-08-19T18:15Z"
+cause = "Slow queries on a saturated database held every connection in the ledger service's pool."
+decoy = "the ledger deploy at 17:52 UTC"   # optional: a plausible wrong answer the Report must not blame

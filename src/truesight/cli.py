@@ -31,7 +31,24 @@ def main(argv: list[str] | None = None) -> int:
     inv.add_argument("--json", action="store_true")
     srv = sub.add_parser("mcp", help="serve the investigate tool to an MCP client over stdio")
     srv.add_argument("--config", default="truesight.toml")
+    ev = sub.add_parser("eval", help="score Reports against incidents with known root causes")
+    ev.add_argument("golden", help="TOML file of [[incident]] entries (see truesight/evaluate.py)")
+    ev.add_argument("--runs", type=int, default=3, help="synthesis runs per incident (default 3)")
+    ev.add_argument("--replay", metavar="DIR", help="reuse the Evidence saved in a previous eval's output dir")
+    ev.add_argument("--out", default=None, help="output dir (default eval-runs/<UTC time>)")
+    ev.add_argument("--config", default="truesight.toml")
     args = p.parse_args(argv)
+    if args.cmd == "eval":
+        from truesight import evaluate
+        cfg = config.load(args.config)
+        out = Path(args.out or f"eval-runs/{datetime.now(timezone.utc):%Y%m%dT%H%MZ}")
+        scores = evaluate.evaluate(cfg, llm.from_config(cfg), Path(args.golden), args.runs,
+                                   Path(args.replay) if args.replay else None, out)
+        print("\n".join(evaluate.summarise(scores)))
+        for s in scores:
+            print(f"  {s.incident} run {s.run}: {s.cause_place}{' · DECOY BLAMED' if s.decoy_blamed else ''} · {s.note}")
+        print(f"saved to {out}")
+        return 0
     if args.cmd == "mcp":
         from truesight.mcp_server import serve  # deferred: MCP SDK only needed here
         serve(args.config)

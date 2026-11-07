@@ -199,3 +199,26 @@ def test_templated_metric_spec_expands_per_path_service():
     specs = metrics.specs_for(cfg, {"ledger", "accounts"})
     assert [(s["query"], s["title"]) for s in specs] == [
         ('max(pool{service="accounts"})', "accounts pool"), ('max(pool{service="ledger"})', "ledger pool")]
+
+
+def test_eval_judges_each_run_and_summarises(tmp_path):
+    import json as _json
+    from truesight import evaluate
+    from truesight.render import as_json
+    ev = (Evidence("sentry", "issue", "LEDGER-5Y", "q", T, T, ("line",), None, 0, "E1"),)
+    saved = enforce({"headline": "h", "summary": "s", "findings": []}, TRIGGER, ev, ())
+    (tmp_path / "replay").mkdir()
+    (tmp_path / "replay" / "G1.json").write_text(as_json(saved))
+    golden = tmp_path / "golden.toml"
+    golden.write_text('[[incident]]\nname = "G1"\nref = "sentry:X"\ncause = "pool exhausted by slow queries"\n'
+                      '[[incident]]\nname = "G2"\nref = "sentry:Y"\ncause = "c"\n')
+    report = _json.dumps({"headline": "h", "summary": "s", "root_cause": {"claim": "pool exhausted", "findings": ["F1"]},
+                          "findings": [{"id": "F1", "claim": "pool full", "evidence": ["E1"]}]})
+    verdicts = iter(['{"cause_place": "root_cause", "decoy_blamed": false, "note": "ok"}',
+                     '{"cause_place": "top_hypothesis", "decoy_blamed": true, "note": "x"}'])
+    llm = lambda system, user: next(verdicts) if "grade" in system else report
+    scores = evaluate.evaluate(Config({"sentry": {}}), llm, golden, 2, tmp_path / "replay", tmp_path / "out")
+    assert [(s.incident, s.cause_place, s.decoy_blamed) for s in scores] == [
+        ("G1", "root_cause", False), ("G1", "top_hypothesis", True), ("G2", "missed", False)]  # G2 not saved
+    assert evaluate.summarise(scores)[1].split() == ["G1", "1/2", "1/2", "0/2", "0/2", "1/2"]
+    assert (tmp_path / "out" / "G1.json").exists() and (tmp_path / "out" / "scores.json").exists()

@@ -4,7 +4,45 @@
 
 Investigates a production error on your own infrastructure: follows the failing request across services, lines it up with deploys, and reports what happened with Evidence behind every claim. A claim the Evidence does not back is shown as a Hypothesis, never as a Finding.
 
-v0 reads Sentry, CloudWatch Logs, and deploy history from a GitOps-style infra repo. See [ARCHITECTURE.md](ARCHITECTURE.md).
+v0 reads Sentry, CloudWatch Logs, CloudWatch and Prometheus metrics, and deploy history from a GitOps-style infra repo. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+[![ci](https://github.com/AayushMiglani/truesight/actions/workflows/ci.yml/badge.svg)](https://github.com/AayushMiglani/truesight/actions/workflows/ci.yml)
+
+## Example
+
+Anonymized and shortened from a real run. A deploy broke one call path; truesight followed the request through three services and named the PR.
+
+```
+ API-1AZ · gateway · 2026-10-23 11:30 UTC
+
+ Gateway calls cards with an empty userId, producing a 404 on /cards/v1/users//link
+
+ LIKELY ROOT CAUSE [F1] [F2] [F4]
+ The gateway requests the per-user link with an empty userId, so cards has no route and returns
+ 404. The per-user call was introduced by PR #1234 (image a1b2c3d4), deployed to gateway at
+ 11:02 UTC, 25 minutes before the first event.
+
+ FINDINGS
+ F1  The failing request is GET /cards/v1/users//link: the userId segment is empty and cards
+     answers 404.
+     ↳ [E1] sentry           API-1AZ
+     ↳ [E2] cloudwatch-logs  request 3F2A91C0… across 4 services
+ F2  The same request carries a valid user id in the gateway and cards logs, so the id was
+     available upstream but not put in the URL.
+     ↳ [E2] cloudwatch-logs  request 3F2A91C0… across 4 services
+ F4  Image a1b2c3d4 ships PR #1234 "Add the application id to the link", which changes
+     CardService.java on the failing path.
+     ↳ [E17] git              gateway prod: image 9f8e7d6c → a1b2c3d4
+
+ HYPOTHESES (not backed by Evidence)
+ H1  The caller that builds the link passes a null userId on one code path.
+     why not a Finding: no log line shows the argument passed.
+     confirm: log the userId argument at the call site and replay the request.
+
+ RULED OUT
+ ✗   gateway config change at 10:09 (logging level only) [E16]
+ ✗   cards database saturation: CPU and connections flat around the error [E5] [E6]
+```
 
 ## Status
 
@@ -49,6 +87,17 @@ What it expects of your stack (v0):
 - A GitOps infra repo where each service's prod config lives under one directory, and image tags are commit SHAs of your app repo.
 
 All Evidence passes PII redaction before it is shown or sent to a model.
+
+## Measure it on your own incidents
+
+List past incidents with a known root cause in a TOML file (see [golden.example.toml](golden.example.toml)), then:
+
+```sh
+truesight eval golden.toml --runs 3                     # gather, synthesise 3 times each, judge each Report
+truesight eval golden.toml --replay eval-runs/<dir>     # reuse saved Evidence after Sentry/log retention expires
+```
+
+A model call judges each Report: is the known cause the root cause, the top Hypothesis, a lower one, or missed, and was a decoy blamed. Several runs per incident, because the same Evidence can give different Reports.
 
 ## Develop
 

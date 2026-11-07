@@ -81,6 +81,8 @@ def cloudwatch_series(cfg: Config, spec: dict, at: datetime, now: datetime) -> E
     )
     result = resp["MetricDataResults"][0]
     points = [(t.astimezone(timezone.utc), v) for t, v in zip(result["Timestamps"], result["Values"])]  # boto gives local tz
+    if not points:
+        raise LookupError("no datapoints in the window")
     dim_text = ",".join(f"{d['Name']}={d['Value']}" for d in dims)
     return Evidence(
         source="cloudwatch-metrics",
@@ -111,7 +113,9 @@ def prometheus_series(cfg: Config, spec: dict, at: datetime, now: datetime) -> E
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"Prometheus {e.code}: {e.read()[:200]!r}") from e
     series = body.get("data", {}).get("result", [])
-    lines = [] if series else ["no datapoints in the window (beyond retention, or the query matched nothing)"]
+    if not series:
+        raise LookupError("no datapoints in the window (beyond retention, or the query matched nothing)")
+    lines = []
     for s in series[:MAX_SERIES]:
         labels = ",".join(f"{k}={v}" for k, v in s["metric"].items() if k != "__name__")
         points = [(datetime.fromtimestamp(t, timezone.utc), float(v)) for t, v in s["values"]]
@@ -130,6 +134,7 @@ def prometheus_series(cfg: Config, spec: dict, at: datetime, now: datetime) -> E
 
 
 def fetch(cfg: Config, spec: dict, at: datetime, now: datetime) -> Evidence:
+    """Raises LookupError when the series is empty: the caller records a Gap, not Evidence."""
     source = spec.get("source", "cloudwatch")
     if source == "cloudwatch":
         return cloudwatch_series(cfg, spec, at, now)

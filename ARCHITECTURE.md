@@ -25,6 +25,11 @@ truesight investigate <sentry-url | sentry:ID> [--at T]     (or MCP: truesight m
   │               a ruled-out deploy with no citation becomes a Hypothesis
   │
   └─ render.py          terminal text (verdict first) or --json; --no-llm prints the ledger only
+
+truesight eval golden.toml [--runs N] [--replay DIR]
+  └─ evaluate.py        gather once per incident, synthesise N times, a model call judges each
+                        Report against the known cause: root cause / top hypothesis / other / missed,
+                        and whether a decoy was blamed. Empty metric series are Gaps, not Evidence.
 ```
 
 ## Decisions taken to unblock building
@@ -43,6 +48,6 @@ Defaults, not final answers. Each is revisited when evaluation on a set of real 
 
 ## Not built yet (in order)
 
-1. Automated golden-set scoring, and a comparison with HolmesGPT.
+1. A comparison with HolmesGPT on the same golden set.
 2. Triggers beyond Sentry: Grafana alert, CloudWatch alarm.
 3. Datadog connector.
