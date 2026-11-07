@@ -5,6 +5,7 @@ from truesight.config import Config
 from truesight.connectors import cloudwatch, deploys, sentry
 from truesight.model import Evidence, Trigger
 from truesight.redact import redact
+from truesight.render import as_json, ledger_from_json
 from truesight.synthesis import enforce, parse_json, synthesise
 
 T = datetime(2026, 8, 19, 18, 13, tzinfo=timezone.utc)
@@ -162,3 +163,9 @@ def test_parse_json_rejects_prose():
     except ValueError:
         return
     raise AssertionError("expected ValueError")
+
+
+def test_saved_report_round_trips_to_the_same_ledger():
+    ev = (Evidence("sentry", "issue", "LEDGER-5Y", "q", T, T, ("line",), "https://x", 1, "E1"),)
+    report = enforce({"headline": "h", "summary": "s", "findings": []}, TRIGGER, ev, ())
+    assert ledger_from_json(as_json(report)) == (TRIGGER, ev, ())

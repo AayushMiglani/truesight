@@ -26,7 +26,8 @@ aws sso login --profile prod
 
 truesight investigate https://your-org.sentry.io/issues/API-1AZ/ --at 2026-10-23T11:30Z --no-llm   # Evidence only, nothing sent to a model
 truesight investigate sentry:API-1AZ --at 2026-10-23T11:30Z                                       # full Report
-truesight investigate sentry:API-1AZ --json
+truesight investigate sentry:API-1AZ --json > report.json
+truesight investigate --from-ledger report.json                                                   # rerun synthesis on saved Evidence (works after Sentry/log retention expires)
 ```
 
 What it expects of your stack (v0):

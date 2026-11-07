@@ -1,10 +1,12 @@
-"""truesight investigate <sentry-url | sentry:ID> [--at ISO] [--no-llm] [--json]"""
+"""truesight investigate <sentry-url | sentry:ID> [--at ISO] [--no-llm] [--json]
+   truesight investigate --from-ledger report.json [--json]"""
 
 import argparse
 import sys
 import time
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 
 from truesight import config, llm, render
 from truesight.gather import gather
@@ -20,16 +22,26 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="truesight")
     sub = p.add_subparsers(dest="cmd", required=True)
     inv = sub.add_parser("investigate", help="investigate one Trigger")
-    inv.add_argument("ref", help="Sentry issue URL, sentry:<ID>, or a bare issue ID")
+    inv.add_argument("ref", nargs="?", help="Sentry issue URL, sentry:<ID>, or a bare issue ID")
+    inv.add_argument("--from-ledger", metavar="REPORT_JSON",
+                     help="skip gathering; rerun synthesis on the Evidence saved in a --json Report")
     inv.add_argument("--at", type=_parse_at, help="anchor on the event nearest this time (UTC ISO)")
     inv.add_argument("--config", default="truesight.toml")
     inv.add_argument("--no-llm", action="store_true", help="gather Evidence only; nothing goes to a model")
     inv.add_argument("--json", action="store_true")
     args = p.parse_args(argv)
+    if bool(args.ref) == bool(args.from_ledger):
+        p.error("give exactly one of: a Trigger ref, or --from-ledger")
 
     cfg = config.load(args.config)
     t0 = time.monotonic()
-    trigger, evidence, gaps = gather(cfg, args.ref, args.at)
+    if args.from_ledger:
+        try:
+            trigger, evidence, gaps = render.ledger_from_json(Path(args.from_ledger).read_text())
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            p.error(f"cannot read ledger {args.from_ledger}: {e}")
+    else:
+        trigger, evidence, gaps = gather(cfg, args.ref, args.at)
     if args.no_llm:
         print(render.ledger(trigger, evidence, gaps))
         return 0

@@ -3,6 +3,7 @@
 import json
 import textwrap
 from dataclasses import asdict
+from datetime import datetime
 
 from truesight.model import Evidence, Gap, Report, Trigger
 
@@ -71,3 +72,16 @@ def ledger(trigger: Trigger, evidence: tuple[Evidence, ...], gaps: tuple[Gap, ..
 
 def as_json(obj) -> str:
     return json.dumps(asdict(obj), indent=2, default=str, ensure_ascii=False)
+
+
+def ledger_from_json(text: str) -> tuple[Trigger, tuple[Evidence, ...], tuple[Gap, ...]]:
+    """Trigger, Evidence and Gaps back from a saved --json Report, to rerun synthesis
+    after the sources have expired (Sentry retention, log retention)."""
+    r = json.loads(text)
+    when = datetime.fromisoformat
+    trigger = Trigger(**{**r["trigger"], "at": when(r["trigger"]["at"])})
+    evidence = tuple(
+        Evidence(**{**e, "start": when(e["start"]), "end": when(e["end"]), "snapshot": tuple(e["snapshot"])})
+        for e in r["evidence"]
+    )
+    return trigger, evidence, tuple(Gap(**g) for g in r["gaps"])
