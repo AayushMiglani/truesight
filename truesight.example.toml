@@ -1,0 +1,36 @@
+# Copy to truesight.toml. Secrets are never stored here: name the env var instead.
+
+[sentry]
+org = "your-org"
+host = "https://us.sentry.io"
+token_env = "SENTRY_AUTH_TOKEN"
+# Where the request ID lives on an event: a tag, or a key in extra.
+correlation_keys = ["tag:request_id", "extra:request_id"]
+
+[cloudwatch]
+profile = "prod"
+region = "us-east-1"
+log_group = "/aws/eks/logs/application/prod.{service}"
+window_minutes = 15
+timeout_seconds = 60
+
+[deploys]
+# Local clone of the infra repo; every commit under a service's prod dir (values.yaml, config-values.yaml) is a deploy or config change.
+repo = "~/code/infrastructure"
+path = "services/app/{service}/prod/"
+commit_url = "https://github.com/your-org/infrastructure/commit/{sha}"
+# Image tags are commit SHAs in this repo; each image bump lists the commits it shipped.
+code_repo = "~/code/app"
+code_paths = ["{service}/", "core/"]
+lookback_hours = 24
+
+[llm]
+# Any LiteLLM model string, e.g. anthropic/claude-sonnet-5-5, deepseek/deepseek-chat, ollama/llama3.
+model = "anthropic/claude-sonnet-5-5"
+
+# Service map. Key = k8s Deployment name (also the log group suffix and the infra repo dir).
+# Only list overrides; `sentry` defaults to the key.
+[services.gateway]
+[services.orders]
+[services.payments]
+sentry = "payments-service"
