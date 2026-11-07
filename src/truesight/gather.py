@@ -2,10 +2,10 @@
 Every fetch lands in the Evidence ledger; every failure lands in Gaps."""
 
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from truesight.config import Config
-from truesight.connectors import cloudwatch, deploys, sentry
+from truesight.connectors import cloudwatch, deploys, metrics, sentry
 from truesight.model import Evidence, Gap, Trigger
 
 MAX_IDS_FOLLOWED = 3
@@ -45,5 +45,12 @@ def gather(cfg: Config, ref: str, at: datetime | None) -> tuple[Trigger, tuple[E
                     evidence.append(runtime)
             except Exception as e:
                 gaps.append(Gap("git", f"deploys of {svc}", str(e)))
+
+    now = datetime.now(timezone.utc)
+    for spec in metrics.specs_for(cfg, services):
+        try:
+            evidence.append(metrics.fetch(cfg, spec, trigger.at, now))
+        except Exception as e:
+            gaps.append(Gap("metrics", spec.get("title") or spec.get("metric", "?"), str(e)))
 
     return trigger, _number(evidence), tuple(gaps)

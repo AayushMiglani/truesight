@@ -23,6 +23,10 @@ class Config:
         return self.raw.get("deploys", {})
 
     @property
+    def metrics(self) -> list[dict]:
+        return self.raw.get("metrics", [])
+
+    @property
     def llm(self) -> dict:
         return self.raw.get("llm", {})
 

@@ -28,6 +28,16 @@ lookback_hours = 24
 # Any LiteLLM model string, e.g. anthropic/claude-sonnet-5-5, deepseek/deepseek-chat, ollama/llama3.
 model = "anthropic/claude-sonnet-5-5"
 
+# Metric series, attached when one of `services` is on the request path.
+[[metrics]]
+services = ["orders", "payments"]
+source = "cloudwatch"
+namespace = "AWS/RDS"
+metric = "CPUUtilization"
+stat = "Maximum"
+dimensions = { DBInstanceIdentifier = "prod-db-writer" }
+title = "orders DB CPU max"
+
 # Service map. Key = k8s Deployment name (also the log group suffix and the infra repo dir).
 # Only list overrides; `sentry` defaults to the key.
 [services.gateway]

@@ -177,3 +177,14 @@ def test_mcp_investigate_turns_config_exit_into_tool_error(tmp_path):
     from mcp.server.mcpserver.exceptions import ToolError
     with pytest.raises(ToolError, match="config not found"):
         investigate(tmp_path / "missing.toml", "sentry:X-1")
+
+
+def test_metric_summary_shows_baseline_and_peak():
+    from truesight.connectors import metrics
+    pts = [(T - timedelta(minutes=10 * i), 40.0) for i in range(6, 0, -1)] + [(T, 100.0), (T + timedelta(minutes=10), 98.0)]
+    lines = metrics.summarise(pts, T)
+    assert lines[0] == "early-window baseline 40 · peak 100 at 08-19 18:13 UTC · min 40 · first ≥1.5x baseline at 08-19 18:13 UTC"
+    assert metrics.summarise([], T) == ["no datapoints in the window"]
+    assert metrics.period_for(timedelta(days=81)) == 3600 and metrics.period_for(timedelta(days=1)) == 60
+    cfg = Config({"sentry": {}, "metrics": [{"services": ["ledger"], "metric": "CPU"}, {"services": ["web"], "metric": "x"}]})
+    assert [m["metric"] for m in metrics.specs_for(cfg, {"ledger", "accounts"})] == ["CPU"]

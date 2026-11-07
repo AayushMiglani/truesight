@@ -28,6 +28,9 @@ Rules:
   commit is shortly before or after the error; weigh what the change does against the failure.
 - A Sentry issue first seen long before the window is a recurring condition: ask what changed
   to make it fire now, including config that sets a limit the failure hits.
+- Order Hypotheses by how much Evidence points at them, strongest first. A metric that saturates
+  before the error starts is direct support; a deploy whose diff does not touch the failing path
+  is weak support.
 - If the ledger cannot explain the failure, say so in the root cause. Do not invent Evidence."""
 
 Llm = Callable[[str, str], str]
