@@ -16,7 +16,7 @@ class FakeLLM:
         self.calls: list[tuple[list[dict], list[dict]]] = []
 
     def complete(self, messages: list[dict], tools: list[dict]) -> Reply:
-        self.calls.append((messages, tools))
+        self.calls.append((list(messages), tools))
         return self._replies.pop(0)
 
 
@@ -38,6 +38,7 @@ def test_echo_result_is_fed_back_then_answered():
         ]
     )
     assert investigate("check echo", llm=llm, tools=[echo_tool]) == "echo returned ping"
+    assert [m["role"] for m in llm.calls[0][0]] == ["system", "user"]
     messages = llm.calls[1][0]
     assert [m["role"] for m in messages] == ["system", "user", "assistant", "tool"]
     assert json.loads(messages[2]["tool_calls"][0]["function"]["arguments"]) == {"text": "ping"}
