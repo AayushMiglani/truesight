@@ -18,10 +18,10 @@ to `.env` and set:
 ## Run
 
 ```bash
-uv run python -m truesight "disk full on db-1"
+uv run --env-file .env python -m truesight "disk full on db-1"
 ```
 
-With no arguments the command prints usage and exits 0.
+`--env-file` makes uv load the variables from `.env` (alternatively, export them in the shell). With no arguments the command prints usage and exits 0.
 
 ## Tests and lint
 
