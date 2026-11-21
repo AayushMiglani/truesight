@@ -2,14 +2,7 @@
 __pycache__/
 *.egg-info/
 .idea/
-truesight.toml
 .pytest_cache/
-.scratch/truesight/runs/
 .scratch/
-prototypes/
-eval-runs/
-
-# Cloud-OpsBench data lives outside git via the TRUESIGHT_BENCH_DIR env var.
 bench/
 .env
-
