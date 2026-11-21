@@ -8,3 +8,8 @@ truesight.toml
 .scratch/
 prototypes/
 eval-runs/
+
+# Cloud-OpsBench data lives outside git via the TRUESIGHT_BENCH_DIR env var.
+bench/
+.env
+
