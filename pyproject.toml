@@ -1,0 +1,15 @@
+[project]
+name = "truesight"
+version = "0.1.0"
+description = "Eval test bed for an incident investigator. No agent loop yet."
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

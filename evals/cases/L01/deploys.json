@@ -1,0 +1,20 @@
+[
+  {
+    "id": "d-441",
+    "service": "checkout-api",
+    "at": "2026-03-14T09:10:00Z",
+    "change": "image 2.4.1, receipt wording only"
+  },
+  {
+    "id": "d-448",
+    "service": "catalog-service",
+    "at": "2026-03-14T13:55:00Z",
+    "change": "image 1.9.0, new search ranking"
+  },
+  {
+    "id": "d-449",
+    "service": "checkout-api",
+    "at": "2026-03-14T13:58:00Z",
+    "change": "config db_pool_size from 20 to 2"
+  }
+]

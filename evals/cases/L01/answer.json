@@ -1,0 +1,5 @@
+{
+  "root_cause": "A checkout-api config deploy at 13:58 UTC cut db_pool_size from 20 to 2, so requests waited on the connection pool until they hit a timeout and the API returned 5xx.",
+  "must_mention": ["connection pool", "timeout", "db_pool_size"],
+  "decoy": ["catalog-service", "d-448"]
+}

@@ -1,0 +1,32 @@
+{"ts": "2026-03-14T13:50:01Z", "service": "checkout-db", "level": "INFO", "msg": "listening on 5432, accepting connections"}
+{"ts": "2026-03-14T13:50:12Z", "service": "checkout-api", "level": "INFO", "msg": "POST /v1/checkout status=200 duration_ms=38 pool_active=3 pool_idle=17 pool_max=20"}
+{"ts": "2026-03-14T13:51:40Z", "service": "checkout-api", "level": "INFO", "msg": "POST /v1/checkout status=200 duration_ms=41 pool_active=4 pool_idle=16 pool_max=20"}
+{"ts": "2026-03-14T13:53:05Z", "service": "catalog-service", "level": "INFO", "msg": "GET /v1/search status=200 duration_ms=22"}
+{"ts": "2026-03-14T13:54:18Z", "service": "checkout-api", "level": "INFO", "msg": "POST /v1/checkout status=200 duration_ms=36 pool_active=2 pool_idle=18 pool_max=20"}
+{"ts": "2026-03-14T13:55:02Z", "service": "catalog-service", "level": "INFO", "msg": "starting version 1.9.0"}
+{"ts": "2026-03-14T13:55:11Z", "service": "catalog-service", "level": "INFO", "msg": "GET /v1/search status=200 duration_ms=27"}
+{"ts": "2026-03-14T13:56:02Z", "service": "checkout-api", "level": "INFO", "msg": "POST /v1/checkout status=200 duration_ms=45 pool_active=6 pool_idle=14 pool_max=20"}
+{"ts": "2026-03-14T13:57:44Z", "service": "checkout-api", "level": "INFO", "msg": "POST /v1/checkout status=200 duration_ms=39 pool_active=5 pool_idle=15 pool_max=20"}
+{"ts": "2026-03-14T13:58:20Z", "service": "checkout-api", "level": "INFO", "msg": "pool stats pool_active=2 pool_idle=0 pool_max=2"}
+{"ts": "2026-03-14T13:58:48Z", "service": "checkout-db", "level": "INFO", "msg": "connections=2 state=active errors=0"}
+{"ts": "2026-03-14T13:59:10Z", "service": "checkout-api", "level": "WARN", "msg": "POST /v1/checkout waiting for a free connection pool_active=2 pool_max=2"}
+{"ts": "2026-03-14T13:59:40Z", "service": "catalog-service", "level": "INFO", "msg": "GET /v1/product/8841 status=200 duration_ms=18"}
+{"ts": "2026-03-14T14:00:05Z", "service": "checkout-api", "level": "WARN", "msg": "POST /v1/checkout waiting for a free connection pool_active=2 pool_max=2"}
+{"ts": "2026-03-14T14:00:06Z", "service": "checkout-api", "level": "INFO", "msg": "POST /v1/checkout status=200 duration_ms=2400 pool_active=2 pool_max=2"}
+{"ts": "2026-03-14T14:01:12Z", "service": "checkout-api", "level": "INFO", "msg": "POST /v1/checkout status=200 duration_ms=890 pool_active=2 pool_max=2"}
+{"ts": "2026-03-14T14:02:01Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout connection pool timeout after 3000ms pool_active=2 pool_max=2"}
+{"ts": "2026-03-14T14:02:02Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout status=500 duration_ms=3008"}
+{"ts": "2026-03-14T14:02:30Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout status=500 duration_ms=3010"}
+{"ts": "2026-03-14T14:03:15Z", "service": "checkout-db", "level": "INFO", "msg": "connections=2 checkpoints=ok errors=0"}
+{"ts": "2026-03-14T14:03:40Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout connection pool timeout after 3000ms pool_active=2 pool_max=2"}
+{"ts": "2026-03-14T14:03:41Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout status=500 duration_ms=3011"}
+{"ts": "2026-03-14T14:04:05Z", "service": "catalog-service", "level": "INFO", "msg": "GET /v1/search status=200 duration_ms=24"}
+{"ts": "2026-03-14T14:04:22Z", "service": "checkout-api", "level": "WARN", "msg": "POST /v1/checkout waiting for a free connection pool_active=2 pool_max=2"}
+{"ts": "2026-03-14T14:05:01Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout status=500 duration_ms=3009"}
+{"ts": "2026-03-14T14:05:48Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout connection pool timeout after 3000ms pool_active=2 pool_max=2"}
+{"ts": "2026-03-14T14:06:10Z", "service": "checkout-api", "level": "INFO", "msg": "GET /health status=200 duration_ms=4"}
+{"ts": "2026-03-14T14:06:33Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout status=500 duration_ms=3014"}
+{"ts": "2026-03-14T14:07:02Z", "service": "checkout-db", "level": "INFO", "msg": "connections=2 accepting=true errors=0"}
+{"ts": "2026-03-14T14:07:21Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout status=500 duration_ms=3006"}
+{"ts": "2026-03-14T14:07:55Z", "service": "catalog-service", "level": "INFO", "msg": "GET /v1/search status=200 duration_ms=19"}
+{"ts": "2026-03-14T14:08:12Z", "service": "checkout-api", "level": "ERROR", "msg": "POST /v1/checkout connection pool timeout after 3000ms pool_active=2 pool_max=2"}
