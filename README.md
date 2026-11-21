@@ -8,6 +8,21 @@ Eval data stays local; set `TRUESIGHT_BENCH_DIR` to a Cloud-OpsBench checkout.
 
 Python 3.12 and uv. From the repository root, run `uv sync`.
 
+The model is DeepSeek through the OpenAI-compatible API. Copy `.env.example`
+to `.env` and set:
+
+- `TRUESIGHT_LLM_API_KEY` — required
+- `TRUESIGHT_LLM_BASE_URL` — optional, default `https://api.deepseek.com`
+- `TRUESIGHT_LLM_MODEL` — optional, default `deepseek-chat`
+
+## Run
+
+```bash
+uv run --env-file .env python -m truesight "disk full on db-1"
+```
+
+`--env-file` makes uv load the variables from `.env` (alternatively, export them in the shell). With no arguments the command prints usage and exits 0.
+
 ## Tests and lint
 
 ```bash

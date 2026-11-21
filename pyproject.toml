@@ -3,7 +3,9 @@ name = "truesight"
 version = "0.1.0"
 description = "Agent that investigates an incident and explains the likely root cause."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "openai>=3.57.0",
+]
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.8"]
