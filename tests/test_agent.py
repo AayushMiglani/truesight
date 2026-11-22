@@ -98,6 +98,12 @@ def test_parses_fenced_json():
     assert investigate("alert", llm=llm, tools=[]) == Answer(**ANSWER)
 
 
+def test_parses_json_surrounded_by_prose():
+    text = "Here's my answer: " + json.dumps(ANSWER) + " Hope that helps."
+    llm = FakeLLM([Reply(text=text)])
+    assert investigate("alert", llm=llm, tools=[]) == Answer(**ANSWER)
+
+
 def test_malformed_json_keeps_the_raw_text():
     llm = FakeLLM([Reply(text="not json")])
     assert investigate("alert", llm=llm, tools=[]) == Answer("", "", "", "not json")

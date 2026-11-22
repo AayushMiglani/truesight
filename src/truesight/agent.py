@@ -85,15 +85,16 @@ def _parse_answer(text: str) -> Answer:
 
 
 def _json_body(text: str) -> str:
-    """Drop a ```json fence so the model can wrap its object."""
-    stripped = text.strip()
-    if not stripped.startswith("```"):
-        return stripped
-    lines = stripped.splitlines()
-    inner = lines[1:]
-    if inner and inner[-1].strip() == "```":
-        inner = inner[:-1]
-    return "\n".join(inner).strip()
+    """Return the first JSON object in text, ignoring prose and fences around it."""
+    decoder = json.JSONDecoder()
+    for i, char in enumerate(text):
+        if char == "{":
+            try:
+                _, end_idx = decoder.raw_decode(text, i)
+                return text[i:end_idx]
+            except json.JSONDecodeError:
+                continue
+    return text.strip()
 
 
 def _assistant_message(reply: Reply) -> dict:
