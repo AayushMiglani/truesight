@@ -32,6 +32,7 @@ def investigate(
     llm: LLM | None = None,
     tools: Sequence[Tool] | None = None,
     max_steps: int = 8,
+    context: str | None = None,
 ) -> Answer:
     """Explain an alert.
 
@@ -39,15 +40,18 @@ def investigate(
     back to the model as that call's tool result. Raises MaxStepsExceeded when
     the model is still calling tools after max_steps calls. The final text is
     parsed into an Answer; if it is not the expected JSON, the raw text is the
-    explanation.
+    explanation. A non-empty context is appended to the system prompt.
     """
     if llm is None:
         llm = llm_from_env()
     chosen = DEFAULT_TOOLS if tools is None else tools
     by_name = {tool.name: tool for tool in chosen}
     openai_tools = to_openai_tools(chosen)
+    system = SYSTEM_PROMPT
+    if context:
+        system = f"{SYSTEM_PROMPT}\n\nAdditional context from the operator:\n{context}"
     messages: list[dict] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system},
         {"role": "user", "content": alert},
     ]
 

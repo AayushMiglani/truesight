@@ -3,7 +3,7 @@ import json
 import pytest
 
 from truesight.__main__ import main
-from truesight.agent import Answer, MaxStepsExceeded, investigate
+from truesight.agent import SYSTEM_PROMPT, Answer, MaxStepsExceeded, investigate
 from truesight.llm import Reply, ToolCall
 from truesight.tools import Tool, echo_tool
 
@@ -115,11 +115,64 @@ def test_incomplete_json_keeps_the_raw_text():
     assert investigate("alert", llm=llm, tools=[]) == Answer("", "", "", raw)
 
 
-def test_main_prints_the_investigation(monkeypatch, capsys):
-    monkeypatch.setattr(
-        "truesight.__main__.investigate",
-        lambda alert: Answer("disk", "full", "logs", f"cause: {alert}"),
+def test_system_message_is_the_prompt_when_context_is_absent():
+    llm = FakeLLM([Reply(text=json.dumps(ANSWER))])
+    investigate("alert", llm=llm, tools=[])
+    assert llm.calls[0][0][0] == {"role": "system", "content": SYSTEM_PROMPT}
+
+
+def test_context_is_appended_to_the_system_message():
+    llm = FakeLLM([Reply(text=json.dumps(ANSWER))])
+    investigate("alert", llm=llm, tools=[], context="services: checkout, payments")
+    content = llm.calls[0][0][0]["content"]
+    assert content == (
+        f"{SYSTEM_PROMPT}\n\nAdditional context from the operator:\nservices: checkout, payments"
     )
+    assert llm.calls[0][0][1] == {"role": "user", "content": "alert"}
+
+
+def test_empty_context_leaves_the_system_message_unchanged():
+    llm = FakeLLM([Reply(text=json.dumps(ANSWER))])
+    investigate("alert", llm=llm, tools=[], context="")
+    assert llm.calls[0][0][0]["content"] == SYSTEM_PROMPT
+
+
+def test_main_context_file_reaches_the_system_message(monkeypatch, tmp_path, capsys):
+    path = tmp_path / "services.txt"
+    path.write_text("services: checkout, payments\n", encoding="utf-8")
+    llm = FakeLLM([Reply(text=json.dumps(ANSWER)), Reply(text=json.dumps(ANSWER))])
+    monkeypatch.setattr("truesight.agent.llm_from_env", lambda: llm)
+    monkeypatch.setattr("truesight.__main__.tools_from_mcp", lambda url: [])
+
+    main(["truesight", "--context-file", str(path), "disk", "full"])
+    main(
+        [
+            "truesight",
+            "--mcp-url",
+            "http://127.0.0.1:9/mcp",
+            "--context-file",
+            str(path),
+            "disk",
+            "full",
+        ]
+    )
+
+    assert len(llm.calls) == 2
+    for messages, _tools in llm.calls:
+        assert messages[0]["content"] == (
+            f"{SYSTEM_PROMPT}\n\n"
+            "Additional context from the operator:\n"
+            "services: checkout, payments\n"
+        )
+        assert messages[1] == {"role": "user", "content": "disk full"}
+    assert capsys.readouterr().out.count('"explanation": "disk filled up"') == 2
+
+
+def test_main_prints_the_investigation(monkeypatch, capsys):
+    def fake_investigate(alert: str, tools=None, context=None) -> Answer:
+        return Answer("disk", "full", "logs", f"cause: {alert}")
+
+    monkeypatch.setattr("truesight.__main__.investigate", fake_investigate)
     main(["truesight", "disk", "full"])
     assert json.loads(capsys.readouterr().out) == {
         "component": "disk",
@@ -136,7 +189,7 @@ def test_main_loads_tools_from_mcp_url(monkeypatch, capsys):
         seen["url"] = url
         return [echo_tool]
 
-    def fake_investigate(alert: str, tools=None):
+    def fake_investigate(alert: str, tools=None, context=None):
         seen["alert"] = alert
         seen["tool"] = tools[0].name
         return Answer("disk", "full", "logs", "explained")

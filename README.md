@@ -29,6 +29,12 @@ To use tools from an MCP server over Streamable HTTP, pass its URL. Without `--m
 uv run --env-file .env python -m truesight --mcp-url http://127.0.0.1:8000/mcp "disk full on db-1"
 ```
 
+`--context-file` reads a UTF-8 text file and appends it to the system prompt, with or without `--mcp-url`. Use it for a list of service names or a short runbook.
+
+```bash
+uv run --env-file .env python -m truesight --context-file services.txt "disk full on db-1"
+```
+
 The command prints the answer as indented JSON with the keys `component`, `fault_type`, `root_cause`, and `explanation`.
 
 ## Tests and lint
