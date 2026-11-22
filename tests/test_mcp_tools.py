@@ -73,7 +73,11 @@ def test_tools_from_mcp_lists_and_calls(mcp_url: str):
     assert pods.parameters["required"] == ["namespace"]
     assert pods.function(namespace="prod") == "pod web in prod"
 
-    error = tools["get_logs"].function(pod="web")
+    logs = tools["get_logs"]
+    assert logs.description == "Fetch logs for a pod."
+    assert logs.parameters["properties"]["pod"]["type"] == "string"
+    assert logs.parameters["required"] == ["pod"]
+    error = logs.function(pod="web")
     assert error.startswith("error:")
     assert "no logs for web" in error
 
