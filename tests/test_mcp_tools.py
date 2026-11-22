@@ -1,3 +1,4 @@
+import json
 import socket
 import threading
 import time
@@ -5,7 +6,21 @@ import time
 import pytest
 from mcp.server.fastmcp import FastMCP
 
+from truesight.agent import Answer, investigate
+from truesight.llm import Reply, ToolCall
 from truesight.mcp_tools import tools_from_mcp
+
+
+class FakeLLM:
+    """Scripted model. Records each complete() call and takes no network."""
+
+    def __init__(self, replies: list[Reply]) -> None:
+        self._replies = list(replies)
+        self.calls: list[tuple[list[dict], list[dict]]] = []
+
+    def complete(self, messages: list[dict], tools: list[dict]) -> Reply:
+        self.calls.append((list(messages), tools))
+        return self._replies.pop(0)
 
 
 @pytest.fixture(scope="module")
@@ -61,3 +76,29 @@ def test_tools_from_mcp_lists_and_calls(mcp_url: str):
     error = tools["get_logs"].function(pod="web")
     assert error.startswith("error:")
     assert "no logs for web" in error
+
+
+def test_investigate_with_mcp_tools(mcp_url: str):
+    llm = FakeLLM(
+        [
+            Reply(tool_calls=[ToolCall("call-1", "get_pods", {"namespace": "prod"})]),
+            Reply(
+                text=json.dumps(
+                    {
+                        "component": "web",
+                        "fault_type": "crash",
+                        "root_cause": "pod missing",
+                        "explanation": "the pod list names web",
+                    }
+                )
+            ),
+        ]
+    )
+    answer = investigate("web down", llm=llm, tools=tools_from_mcp(mcp_url))
+    assert answer == Answer(
+        component="web",
+        fault_type="crash",
+        root_cause="pod missing",
+        explanation="the pod list names web",
+    )
+    assert llm.calls[1][0][-1]["content"] == "pod web in prod"
