@@ -13,4 +13,4 @@ def test_package_imports_and_module_exits_zero():
         text=True,
     )
     assert completed.returncode == 0
-    assert completed.stdout == "usage: python -m truesight\n"
+    assert completed.stdout == "usage: python -m truesight [--mcp-url URL] ALERT\n"
