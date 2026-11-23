@@ -913,6 +913,7 @@ name = "truesight"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "jsonschema" },
     { name = "mcp" },
     { name = "openai" },
 ]
@@ -925,6 +926,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jsonschema", specifier = ">=4.26,<5" },
     { name = "mcp", specifier = ">=1.28,<2" },
     { name = "openai", specifier = ">=3.57.0" },
 ]

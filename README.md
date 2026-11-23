@@ -13,7 +13,7 @@ to `.env` and set:
 
 - `TRUESIGHT_LLM_API_KEY` — required
 - `TRUESIGHT_LLM_BASE_URL` — optional, default `https://api.deepseek.com`
-- `TRUESIGHT_LLM_MODEL` — optional, default `deepseek-chat`
+- `TRUESIGHT_LLM_MODEL` — optional, default `deepseek-flash`
 
 ## Run
 
@@ -35,7 +35,18 @@ uv run --env-file .env python -m truesight --mcp-url http://127.0.0.1:8000/mcp "
 uv run --env-file .env python -m truesight --context-file services.txt "disk full on db-1"
 ```
 
-The command prints the answer as indented JSON with the keys `component`, `fault_type`, `root_cause`, and `explanation`.
+The agent finishes by calling its built-in `submit_answer` tool; the arguments are checked
+against a JSON schema and an invalid answer is sent back to the model to fix. The command
+prints the answer as indented JSON:
+
+- `status`: `established` or `not_established`
+- `summary`: one sentence, what is wrong and where
+- `component`, `fault_type`: the thing at fault and a short label for the kind of fault
+- `location`: `kind` (code, config, change, resource, dependency, other) and `address`
+  (file and line, config key, commit, or resource name)
+- `mechanism`: how the fault produces the symptom
+- `evidence`: the tool calls and what their output showed
+- `ruled_out`: other explanations checked and why each was dropped
 
 ## Tests and lint
 

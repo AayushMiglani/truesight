@@ -1,4 +1,3 @@
-import json
 import socket
 import threading
 import time
@@ -6,7 +5,8 @@ import time
 import pytest
 from mcp.server.fastmcp import FastMCP
 
-from truesight.agent import Answer, investigate
+from truesight.agent import investigate
+from truesight.answer import parse_answer
 from truesight.llm import Reply, ToolCall
 from truesight.mcp_tools import tools_from_mcp
 
@@ -83,26 +83,22 @@ def test_tools_from_mcp_lists_and_calls(mcp_url: str):
 
 
 def test_investigate_with_mcp_tools(mcp_url: str):
+    args = {
+        "status": "established",
+        "summary": "web pod missing",
+        "component": "web",
+        "fault_type": "crash",
+        "location": {"kind": "resource", "address": "pod web in prod"},
+        "mechanism": "no pod serves web",
+        "evidence": [{"tool": "get_pods", "finding": "pod web in prod"}],
+        "ruled_out": [],
+    }
     llm = FakeLLM(
         [
             Reply(tool_calls=[ToolCall("call-1", "get_pods", {"namespace": "prod"})]),
-            Reply(
-                text=json.dumps(
-                    {
-                        "component": "web",
-                        "fault_type": "crash",
-                        "root_cause": "pod missing",
-                        "explanation": "the pod list names web",
-                    }
-                )
-            ),
+            Reply(tool_calls=[ToolCall("final", "submit_answer", args)]),
         ]
     )
     answer = investigate("web down", llm=llm, tools=tools_from_mcp(mcp_url))
-    assert answer == Answer(
-        component="web",
-        fault_type="crash",
-        root_cause="pod missing",
-        explanation="the pod list names web",
-    )
+    assert answer == parse_answer(args)
     assert llm.calls[1][0][-1]["content"] == "pod web in prod"
