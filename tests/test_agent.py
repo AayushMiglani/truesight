@@ -16,9 +16,10 @@ ARGS = {
     "location": {"kind": "resource", "address": "/var/log on db-1"},
     "mechanism": "log rotation stopped, disk filled",
     "evidence": [{"tool": "echo", "finding": "95%"}],
-    "ruled_out": [],
+    "ruled_out": [{"explanation": "inode exhaustion", "tool": "echo", "reason": "1% inodes"}],
 }
 ANSWER = parse_answer(ARGS)
+ECHO = Reply(tool_calls=[ToolCall("echo-1", "echo", {"text": "95%"})])
 
 
 def submit(call_id="final", args=ARGS):
@@ -41,15 +42,15 @@ def tool_names(tools: list[dict]) -> list[str]:
     return [t["function"]["name"] for t in tools]
 
 
-def test_model_submits_immediately():
-    llm = FakeLLM([submit()])
+def test_model_calls_a_tool_then_submits():
+    llm = FakeLLM([ECHO, submit()])
     assert investigate("disk 95%", llm=llm) == ANSWER
     messages, tools = llm.calls[0]
     assert "incident" in messages[0]["content"]
     assert "submit_answer" in messages[0]["content"]
     assert messages[1] == {"role": "user", "content": "disk 95%"}
     assert tool_names(tools) == ["echo", "submit_answer"]
-    assert len(llm.calls) == 1
+    assert len(llm.calls) == 2
 
 
 def test_echo_result_is_fed_back_then_submitted():
@@ -75,7 +76,7 @@ def test_no_reasoning_key_when_the_model_gave_none():
 
 
 def test_unknown_tool_error_is_fed_back():
-    llm = FakeLLM([Reply(tool_calls=[ToolCall("call-1", "missing", {})]), submit()])
+    llm = FakeLLM([Reply(tool_calls=[ToolCall("call-1", "missing", {})]), ECHO, submit()])
     assert investigate("alert", llm=llm) == ANSWER
     assert llm.calls[1][0][-1]["content"] == "error: unknown tool missing"
 
@@ -85,25 +86,26 @@ def test_tool_exception_is_fed_back():
         raise RuntimeError(f"failed on {text}")
 
     broken = Tool("boom", "Always fails.", {"type": "object"}, boom)
-    llm = FakeLLM([Reply(tool_calls=[ToolCall("call-1", "boom", {"text": "x"})]), submit()])
-    assert investigate("alert", llm=llm, tools=[broken]) == ANSWER
+    boom_call = Reply(tool_calls=[ToolCall("call-1", "boom", {"text": "x"})])
+    llm = FakeLLM([boom_call, ECHO, submit()])
+    assert investigate("alert", llm=llm, tools=[broken, echo_tool]) == ANSWER
     assert llm.calls[1][0][-1]["content"] == "error: failed on x"
 
 
 def test_invalid_submission_is_fed_back_with_the_field():
     bad = {**ARGS, "status": "maybe"}
-    llm = FakeLLM([submit("bad", bad), submit()])
-    assert investigate("alert", llm=llm, tools=[]) == ANSWER
-    last = llm.calls[1][0][-1]
+    llm = FakeLLM([ECHO, submit("bad", bad), submit()])
+    assert investigate("alert", llm=llm, tools=[echo_tool]) == ANSWER
+    last = llm.calls[2][0][-1]
     assert last["role"] == "tool"
     assert last["tool_call_id"] == "bad"
     assert last["content"].startswith("error: invalid answer: status:")
 
 
 def test_text_reply_is_nudged_to_submit():
-    llm = FakeLLM([Reply(text="It is the disk.", reasoning="hm"), submit()])
-    assert investigate("alert", llm=llm, tools=[]) == ANSWER
-    messages = llm.calls[1][0]
+    llm = FakeLLM([ECHO, Reply(text="It is the disk.", reasoning="hm"), submit()])
+    assert investigate("alert", llm=llm, tools=[echo_tool]) == ANSWER
+    messages = llm.calls[2][0]
     assert messages[-2] == {
         "role": "assistant",
         "content": "It is the disk.",
@@ -150,6 +152,7 @@ def test_unparseable_arguments_are_sent_back():
     llm = FakeLLM(
         [
             Reply(tool_calls=[ToolCall("call-1", "echo", {}, invalid_arguments='{"text": ')]),
+            ECHO,
             submit(),
         ]
     )
@@ -158,9 +161,9 @@ def test_unparseable_arguments_are_sent_back():
 
 
 def test_last_text_step_and_budget_note_are_one_user_message():
-    llm = FakeLLM([Reply(text="thinking out loud"), submit()])
-    assert investigate("alert", llm=llm, tools=[], max_steps=1) == ANSWER
-    messages = llm.calls[1][0]
+    llm = FakeLLM([ECHO, Reply(text="thinking out loud"), submit()])
+    assert investigate("alert", llm=llm, tools=[echo_tool], max_steps=2) == ANSWER
+    messages = llm.calls[2][0]
     assert [m["role"] for m in messages[-2:]] == ["assistant", "user"]
     assert "budget" in messages[-1]["content"]
 
@@ -179,36 +182,36 @@ def test_a_tool_named_submit_answer_is_rejected():
 
 
 def test_system_message_is_the_prompt_when_context_is_absent():
-    llm = FakeLLM([submit()])
-    investigate("alert", llm=llm, tools=[])
+    llm = FakeLLM([ECHO, submit()])
+    investigate("alert", llm=llm, tools=[echo_tool])
     assert llm.calls[0][0][0] == {"role": "system", "content": SYSTEM_PROMPT}
 
 
 def test_context_is_appended_to_the_system_message():
-    llm = FakeLLM([submit()])
-    investigate("alert", llm=llm, tools=[], context="services: checkout, payments")
+    llm = FakeLLM([ECHO, submit()])
+    investigate("alert", llm=llm, tools=[echo_tool], context="services: checkout, payments")
     assert llm.calls[0][0][0]["content"] == (
         f"{SYSTEM_PROMPT}\n\nAdditional context from the operator:\nservices: checkout, payments"
     )
 
 
 def test_empty_context_leaves_the_system_message_unchanged():
-    llm = FakeLLM([submit()])
-    investigate("alert", llm=llm, tools=[], context="")
+    llm = FakeLLM([ECHO, submit()])
+    investigate("alert", llm=llm, tools=[echo_tool], context="")
     assert llm.calls[0][0][0]["content"] == SYSTEM_PROMPT
 
 
 def test_main_context_file_reaches_the_system_message(monkeypatch, tmp_path, capsys):
     path = tmp_path / "services.txt"
     path.write_text("services: checkout, payments\n", encoding="utf-8")
-    llm = FakeLLM([submit(), submit()])
+    llm = FakeLLM([ECHO, submit(), ECHO, submit()])
     monkeypatch.setattr("truesight.agent.llm_from_env", lambda: llm)
-    monkeypatch.setattr("truesight.__main__.tools_from_mcp", lambda url: [])
+    monkeypatch.setattr("truesight.__main__.tools_from_mcp", lambda url: [echo_tool])
 
     main(["truesight", "--context-file", str(path), "disk", "full"])
     main(["truesight", "--mcp-url", "http://127.0.0.1:9/mcp", "--context-file", str(path), "x"])
 
-    assert len(llm.calls) == 2
+    assert len(llm.calls) == 4
     for messages, _tools in llm.calls:
         assert messages[0]["content"].endswith(
             "Additional context from the operator:\nservices: checkout, payments\n"
@@ -243,3 +246,22 @@ def test_main_loads_tools_from_mcp_url(monkeypatch, capsys):
     main(["truesight", "--mcp-url", "http://127.0.0.1:9/mcp", "disk", "full"])
     assert seen == {"url": "http://127.0.0.1:9/mcp", "alert": "disk full", "tool": "echo"}
     assert json.loads(capsys.readouterr().out)["status"] == "established"
+
+
+def test_evidence_from_a_tool_never_called_is_sent_back():
+    llm = FakeLLM([submit("unseen"), ECHO, submit()])
+    assert investigate("alert", llm=llm, tools=[echo_tool]) == ANSWER
+    sent_back = llm.calls[1][0][-1]
+    assert sent_back["tool_call_id"] == "unseen"
+    assert sent_back["content"].startswith("error: invalid answer: evidence.0.tool:")
+
+
+def test_last_chance_answer_is_checked_against_called_tools():
+    llm = FakeLLM([Reply(text="done"), submit()])
+    with pytest.raises(MaxStepsExceeded, match="evidence.0.tool"):
+        investigate("alert", llm=llm, tools=[echo_tool], max_steps=1)
+
+
+def test_system_prompt_allows_not_established():
+    assert "not_established" in SYSTEM_PROMPT
+    assert "leading candidate" in SYSTEM_PROMPT

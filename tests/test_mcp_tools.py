@@ -84,7 +84,7 @@ def test_tools_from_mcp_lists_and_calls(mcp_url: str):
 
 def test_investigate_with_mcp_tools(mcp_url: str):
     args = {
-        "status": "established",
+        "status": "not_established",
         "summary": "web pod missing",
         "component": "web",
         "fault_type": "crash",
