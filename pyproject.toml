@@ -5,10 +5,16 @@ description = "Agent that investigates an incident and explains the likely root 
 requires-python = ">=3.12"
 dependencies = [
     "pydantic-ai-slim[mcp,openai]==2.75.0",
+    "pydantic-settings>=2.16.3",
+    "sentry-sdk>=3.0.1",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.8"]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=8",
+    "ruff>=0.8",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -18,4 +24,12 @@ build-backend = "hatchling.build"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ASYNC", "PT", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603"]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"

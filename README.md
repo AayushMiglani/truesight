@@ -14,6 +14,15 @@ through its OpenAI-compatible chat API. Copy `.env.example` to `.env` and set:
 - `TRUESIGHT_LLM_API_KEY` — required
 - `TRUESIGHT_LLM_BASE_URL` — optional, default `https://api.deepseek.com`
 - `TRUESIGHT_LLM_MODEL` — optional, default `deepseek-flash`
+- `TRUESIGHT_LLM_TIMEOUT_SECONDS`, `TRUESIGHT_LLM_MAX_RETRIES` — optional, default 180 and 2
+
+Settings are checked at startup; a missing or invalid value exits with code 2 and names the variable.
+
+To send traces to Sentry (agent run, each model request with token usage, each tool call), set
+`TRUESIGHT_SENTRY_DSN`. Optional: `TRUESIGHT_SENTRY_ENVIRONMENT` (default `development`),
+`TRUESIGHT_SENTRY_TRACES_SAMPLE_RATE` (default 1.0). Prompts, tool output and stack-frame
+variables are left out unless `TRUESIGHT_SENTRY_INCLUDE_CONTENT=true`, because incident data can
+hold customer data.
 
 ## Run
 
@@ -44,7 +53,9 @@ answer is checked against its schema, an `established` answer must rule somethin
 every `evidence` and `ruled_out` entry must name a tool that ran. A failing answer is sent back
 to the model to fix. When the budget runs out, the model gets one last request offering only
 `submit_answer`; an answer that fails the checks there is returned as `not_established` with
-the reason in `summary`. The command prints the answer as indented JSON:
+the reason in `summary`. The command prints the answer as indented JSON and exits 0 when
+`established`, 3 when `not_established`, 1 when the run fails, 2 on bad input or settings.
+The alert is limited to 4,000 characters and `--context-file` to 100,000. Answer fields:
 
 - `status`: `established` or `not_established`
 - `summary`: one sentence, what is wrong and where
@@ -60,5 +71,6 @@ the reason in `summary`. The command prints the answer as indented JSON:
 ```bash
 uv run ruff check src tests
 uv run ruff format --check src tests
+uv run pyright
 uv run pytest -q
 ```
