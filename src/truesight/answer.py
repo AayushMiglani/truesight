@@ -70,7 +70,7 @@ def answer_error(answer: Answer, called: Collection[str]) -> str | None:
         )
     for field in ("evidence", "ruled_out"):
         for i, item in enumerate(getattr(answer, field)):
-            name = re.match(r"[\w.-]*", item.tool.strip()).group()
+            name = re.split(r"[^\w.-]", item.tool.strip(), maxsplit=1)[0]
             if name not in called:
                 return (
                     f"{field}.{i}.tool: {item.tool!r} does not name a tool you called; "

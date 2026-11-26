@@ -6,3 +6,4 @@ __pycache__/
 .scratch/
 bench/
 .env
+runs/
