@@ -60,10 +60,17 @@ def investigate(
     max_steps: int = DEFAULT_MAX_STEPS,
     context: str | None = None,
     trace: Path | None = None,
+    prompt: str | None = None,
 ) -> Answer:
     return asyncio.run(
         investigate_async(
-            alert, model=model, mcp_urls=mcp_urls, max_steps=max_steps, context=context, trace=trace
+            alert,
+            model=model,
+            mcp_urls=mcp_urls,
+            max_steps=max_steps,
+            context=context,
+            trace=trace,
+            prompt=prompt,
         )
     )
 
@@ -76,16 +83,18 @@ async def investigate_async(
     max_steps: int = DEFAULT_MAX_STEPS,
     context: str | None = None,
     trace: Path | None = None,
+    prompt: str | None = None,
 ) -> Answer:
     model = model or model_from_env()
     settings = _model_settings(model)
-    agent = _agent(model, settings, _toolsets(mcp_urls), context, max_steps, final=False)
+    text = instructions(prompt or SYSTEM_PROMPT, context)
+    agent = _agent(model, settings, _toolsets(mcp_urls), text, max_steps, final=False)
     async with agent:
         with capture_run_messages() as messages:
             try:
                 result = await agent.run(alert, usage_limits=UsageLimits(request_limit=max_steps))
             except UsageLimitExceeded:
-                result = await _final_turn(model, settings, messages, context, max_steps, trace)
+                result = await _final_turn(model, settings, messages, text, max_steps, trace)
             except Exception:
                 _write_trace(trace, messages)
                 raise
@@ -114,11 +123,11 @@ async def _final_turn(
     model: Model,
     settings: ModelSettings,
     messages: list[ModelMessage],
-    context: str | None,
+    text: str,
     max_steps: int,
     trace: Path | None,
 ) -> AgentRunResult[Answer]:
-    agent = _agent(model, settings, [], context, max_steps, final=True)
+    agent = _agent(model, settings, [], text, max_steps, final=True)
     with capture_run_messages() as captured:
         try:
             return await agent.run(
@@ -152,7 +161,7 @@ def _agent(
     model: Model,
     settings: ModelSettings,
     toolsets: Toolsets,
-    context: str | None,
+    text: str,
     max_steps: int,
     final: bool,
 ) -> Agent[None, Answer]:
@@ -161,7 +170,7 @@ def _agent(
         deps_type=type(None),
         name="truesight",
         output_type=ToolOutput(Answer, name=SUBMIT_ANSWER, description=SUBMIT_DESCRIPTION),
-        instructions=instructions(SYSTEM_PROMPT, context),
+        instructions=text,
         toolsets=toolsets,
         retries=max_steps,
         model_settings=settings,

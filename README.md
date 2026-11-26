@@ -2,7 +2,7 @@
 
 truesight will investigate an incident: read logs, deploys, and metrics,
 name the likely root cause, and explain it. This repository holds the agent.
-Eval data stays local; set `TRUESIGHT_BENCH_DIR` to a Cloud-OpsBench checkout.
+Eval data stays outside the repository; see Evals.
 
 ## Setup
 
@@ -66,11 +66,39 @@ The alert is limited to 4,000 characters and `--context-file` to 100,000. Answer
 - `evidence`: the tool calls and what their output showed
 - `ruled_out`: other explanations checked and why each was dropped
 
+## Evals
+
+`evals/` runs truesight on benchmark cases and scores the answers. Each benchmark is an
+adapter (`evals/benchmarks/`) that lists cases, starts a case's environment (its MCP servers)
+and scores an answer; the runner is shared. Benchmark data stays outside the repository.
+
+Cloud-OpsBench: set `CLOUDOPSBENCH_DIR` to a checkout with its `.venv` set up.
+
+```bash
+uv run --env-file .env python -m evals run cloudopsbench --cases-file dev.txt --repeats 3
+uv run --env-file .env python -m evals resume runs/evals/<run>
+uv run python -m evals report runs/evals/<run>
+uv run python -m evals compare runs/evals/<run-a> runs/evals/<run-b>
+```
+
+`run` options: `--cases-file` (one case id or path per line) or `--sample N --seed S`
+(stratified by group), `--repeats K`, `--jobs`, `--max-steps` (default 15), `--timeout`
+(seconds per run, default 900), `--prompt-file`, `--model-api chat|responses`, `--tag`.
+A local adapter can be passed as a path to a `.py` file that defines `create_benchmark()`.
+
+Each run directory (under `TRUESIGHT_EVAL_RUNS_DIR`, default `runs/evals`) holds `run.json`
+(git SHA, prompt hash, model, settings, cases), `prompt.txt`, `results.jsonl` (one record per
+case and repeat) and `logs/` (trace and MCP server log per run). A run that fails because of
+the model provider, the environment or the timeout is an infra failure: it is not scored, and
+`resume` runs it again. A run that ends without a valid answer is an agent failure and scores
+as a miss. `report` shows pass@k (cases passed at least once) and pass^k (cases passed every
+time), per-group results, failures and tokens.
+
 ## Tests and lint
 
 ```bash
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check
+uv run ruff format --check
 uv run pyright
 uv run pytest -q
 ```
