@@ -1,265 +1,162 @@
 import json
 
 import pytest
+from pydantic_ai import ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.providers.deepseek import DeepSeekProvider
+from scripted import ARGS, Scripted, call, submit
 
 from truesight.__main__ import main
-from truesight.agent import SYSTEM_PROMPT, MaxStepsExceeded, investigate
-from truesight.answer import parse_answer
-from truesight.llm import Reply, ToolCall
-from truesight.tools import Tool, echo_tool
+from truesight.agent import SYSTEM_PROMPT, MaxStepsExceeded, investigate, model_from_env
+from truesight.answer import Answer
 
-ARGS = {
-    "status": "established",
-    "summary": "disk filled by logs",
-    "component": "disk",
-    "fault_type": "full",
-    "location": {"kind": "resource", "address": "/var/log on db-1"},
-    "mechanism": "log rotation stopped, disk filled",
-    "evidence": [{"tool": "echo", "finding": "95%"}],
-    "ruled_out": [{"explanation": "inode exhaustion", "tool": "echo", "reason": "1% inodes"}],
-}
-ANSWER = parse_answer(ARGS)
-ECHO = Reply(tool_calls=[ToolCall("echo-1", "echo", {"text": "95%"})])
-
-
-def submit(call_id="final", args=ARGS):
-    return Reply(tool_calls=[ToolCall(call_id, "submit_answer", args)])
-
-
-class FakeLLM:
-    """Scripted model. Records each complete() call and takes no network."""
-
-    def __init__(self, replies: list[Reply]) -> None:
-        self._replies = list(replies)
-        self.calls: list[tuple[list[dict], list[dict]]] = []
-
-    def complete(self, messages: list[dict], tools: list[dict]) -> Reply:
-        self.calls.append((list(messages), tools))
-        return self._replies.pop(0)
-
-
-def tool_names(tools: list[dict]) -> list[str]:
-    return [t["function"]["name"] for t in tools]
+ANSWER = Answer.model_validate(ARGS)
+ECHO = call("echo", {"text": "95%"}, "echo-1")
 
 
 def test_model_calls_a_tool_then_submits():
-    llm = FakeLLM([ECHO, submit()])
-    assert investigate("disk 95%", llm=llm) == ANSWER
-    messages, tools = llm.calls[0]
-    assert "incident" in messages[0]["content"]
-    assert "submit_answer" in messages[0]["content"]
-    assert messages[1] == {"role": "user", "content": "disk 95%"}
-    assert tool_names(tools) == ["echo", "submit_answer"]
-    assert len(llm.calls) == 2
+    model = Scripted([ECHO, submit()])
+    assert investigate("disk 95%", model=model) == ANSWER
+    messages, info = model.calls[0]
+    assert "incident" in info.instructions
+    assert "submit_answer" in info.instructions
+    assert messages[0].parts[-1].content == "disk 95%"
+    assert model.tool_names(0) == ["echo", "submit_answer"]
+    assert len(model.calls) == 2
 
 
 def test_echo_result_is_fed_back_then_submitted():
-    llm = FakeLLM([Reply(tool_calls=[ToolCall("call-1", "echo", {"text": "ping"})]), submit()])
-    assert investigate("check echo", llm=llm, tools=[echo_tool]) == ANSWER
-    messages = llm.calls[1][0]
-    assert [m["role"] for m in messages] == ["system", "user", "assistant", "tool"]
-    assert json.loads(messages[2]["tool_calls"][0]["function"]["arguments"]) == {"text": "ping"}
-    assert messages[3] == {"role": "tool", "tool_call_id": "call-1", "content": "ping"}
+    model = Scripted([call("echo", {"text": "ping"}), submit()])
+    assert investigate("check echo", model=model) == ANSWER
+    [result] = model.last_parts(1)
+    assert (result.tool_call_id, result.content) == ("call-1", "ping")
 
 
-def test_reasoning_is_sent_back_with_the_tool_call():
-    first = Reply(tool_calls=[ToolCall("call-1", "echo", {"text": "x"})], reasoning="plan: echo")
-    llm = FakeLLM([first, submit()])
-    investigate("alert", llm=llm, tools=[echo_tool])
-    assert llm.calls[1][0][2]["reasoning_content"] == "plan: echo"
+def test_invalid_submission_is_sent_back_with_the_field():
+    model = Scripted([ECHO, submit({**ARGS, "status": "maybe"}, "bad"), submit()])
+    assert investigate("alert", model=model) == ANSWER
+    [retry] = model.last_parts(2)
+    assert retry.tool_call_id == "bad"
+    assert "status" in retry.model_response_str()
 
 
-def test_no_reasoning_key_when_the_model_gave_none():
-    llm = FakeLLM([Reply(tool_calls=[ToolCall("call-1", "echo", {"text": "x"})]), submit()])
-    investigate("alert", llm=llm, tools=[echo_tool])
-    assert "reasoning_content" not in llm.calls[1][0][2]
-
-
-def test_unknown_tool_error_is_fed_back():
-    llm = FakeLLM([Reply(tool_calls=[ToolCall("call-1", "missing", {})]), ECHO, submit()])
-    assert investigate("alert", llm=llm) == ANSWER
-    assert llm.calls[1][0][-1]["content"] == "error: unknown tool missing"
-
-
-def test_tool_exception_is_fed_back():
-    def boom(text: str) -> str:
-        raise RuntimeError(f"failed on {text}")
-
-    broken = Tool("boom", "Always fails.", {"type": "object"}, boom)
-    boom_call = Reply(tool_calls=[ToolCall("call-1", "boom", {"text": "x"})])
-    llm = FakeLLM([boom_call, ECHO, submit()])
-    assert investigate("alert", llm=llm, tools=[broken, echo_tool]) == ANSWER
-    assert llm.calls[1][0][-1]["content"] == "error: failed on x"
-
-
-def test_invalid_submission_is_fed_back_with_the_field():
-    bad = {**ARGS, "status": "maybe"}
-    llm = FakeLLM([ECHO, submit("bad", bad), submit()])
-    assert investigate("alert", llm=llm, tools=[echo_tool]) == ANSWER
-    last = llm.calls[2][0][-1]
-    assert last["role"] == "tool"
-    assert last["tool_call_id"] == "bad"
-    assert last["content"].startswith("error: invalid answer: status:")
-
-
-def test_text_reply_is_nudged_to_submit():
-    llm = FakeLLM([ECHO, Reply(text="It is the disk.", reasoning="hm"), submit()])
-    assert investigate("alert", llm=llm, tools=[echo_tool]) == ANSWER
-    messages = llm.calls[2][0]
-    assert messages[-2] == {
-        "role": "assistant",
-        "content": "It is the disk.",
-        "reasoning_content": "hm",
-    }
-    assert messages[-1]["role"] == "user"
-    assert "submit_answer" in messages[-1]["content"]
+def test_text_reply_is_sent_back_to_submit():
+    model = Scripted([ECHO, ModelResponse(parts=[TextPart("It is the disk.")]), submit()])
+    assert investigate("alert", model=model) == ANSWER
+    assert len(model.calls) == 3
 
 
 def test_out_of_steps_offers_only_submit_answer():
-    calls = [Reply(tool_calls=[ToolCall(f"call-{i}", "echo", {"text": "x"})]) for i in range(3)]
-    llm = FakeLLM([*calls, submit()])
-    assert investigate("alert", llm=llm, tools=[echo_tool], max_steps=3) == ANSWER
-    assert len(llm.calls) == 4
-    messages, tools = llm.calls[3]
-    assert tool_names(tools) == ["submit_answer"]
-    assert messages[-1]["role"] == "user"
-    assert "budget" in messages[-1]["content"]
+    echoes = [call("echo", {"text": "x"}, f"call-{i}") for i in range(3)]
+    model = Scripted([*echoes, submit()])
+    assert investigate("alert", model=model, max_steps=3) == ANSWER
+    assert len(model.calls) == 4
+    assert model.tool_names(3) == ["submit_answer"]
+    assert "budget" in model.last_parts(3)[-1].content
 
 
-def test_max_steps_raises_when_the_last_chance_is_not_a_valid_submission():
-    calls = [Reply(tool_calls=[ToolCall(f"call-{i}", "echo", {"text": "x"})]) for i in range(4)]
-    llm = FakeLLM(calls)
+def test_max_steps_raises_when_the_last_chance_is_not_a_submission():
+    echoes = [call("echo", {"text": "x"}, f"call-{i}") for i in range(4)]
+    model = Scripted(echoes)
     with pytest.raises(MaxStepsExceeded, match="no final answer after 3 steps"):
-        investigate("alert", llm=llm, tools=[echo_tool], max_steps=3)
-    assert len(llm.calls) == 4
+        investigate("alert", model=model, max_steps=3)
+    assert len(model.calls) == 4
+
+
+def test_schema_invalid_last_chance_submission_raises():
+    model = Scripted([ECHO, submit({**ARGS, "status": "maybe"})])
+    with pytest.raises(MaxStepsExceeded):
+        investigate("alert", model=model, max_steps=1)
+
+
+def test_unchecked_last_chance_answer_is_returned_not_established():
+    model = Scripted([ECHO, submit({**ARGS, "evidence": [{"tool": "GetLogs", "finding": "x"}]})])
+    answer = investigate("alert", model=model, max_steps=1)
+    assert answer.status == "not_established"
+    assert answer.summary.startswith("disk filled by logs (unchecked: evidence.0.tool:")
+    assert answer.evidence[0].tool == "GetLogs"
 
 
 def test_submit_batched_with_other_calls_is_sent_back():
-    batch = Reply(
-        tool_calls=[
-            ToolCall("call-1", "echo", {"text": "x"}),
-            ToolCall("early", "submit_answer", ARGS),
+    batch = ModelResponse(
+        parts=[
+            ToolCallPart("echo", {"text": "x"}, tool_call_id="call-1"),
+            ToolCallPart("submit_answer", ARGS, tool_call_id="early"),
         ]
     )
-    llm = FakeLLM([batch, submit()])
-    assert investigate("alert", llm=llm, tools=[echo_tool]) == ANSWER
-    results = {m["tool_call_id"]: m["content"] for m in llm.calls[1][0] if m["role"] == "tool"}
+    model = Scripted([batch, submit()])
+    assert investigate("alert", model=model) == ANSWER
+    results = {part.tool_call_id: part.model_response_str() for part in model.last_parts(1)}
     assert results["call-1"] == "x"
     assert "alone" in results["early"]
 
 
-def test_unparseable_arguments_are_sent_back():
-    llm = FakeLLM(
-        [
-            Reply(tool_calls=[ToolCall("call-1", "echo", {}, invalid_arguments='{"text": ')]),
-            ECHO,
-            submit(),
-        ]
-    )
-    assert investigate("alert", llm=llm, tools=[echo_tool]) == ANSWER
-    assert llm.calls[1][0][-1]["content"].startswith("error: arguments are not valid JSON")
+def test_evidence_from_a_tool_never_called_is_sent_back():
+    model = Scripted([submit(call_id="unseen"), ECHO, submit()])
+    assert investigate("alert", model=model) == ANSWER
+    [retry] = model.last_parts(1)
+    assert retry.tool_call_id == "unseen"
+    assert "evidence.0.tool:" in retry.model_response_str()
 
 
-def test_last_text_step_and_budget_note_are_one_user_message():
-    llm = FakeLLM([ECHO, Reply(text="thinking out loud"), submit()])
-    assert investigate("alert", llm=llm, tools=[echo_tool], max_steps=2) == ANSWER
-    messages = llm.calls[2][0]
-    assert [m["role"] for m in messages[-2:]] == ["assistant", "user"]
-    assert "budget" in messages[-1]["content"]
+def test_instructions_are_the_prompt_when_context_is_absent():
+    model = Scripted([ECHO, submit()])
+    investigate("alert", model=model)
+    assert model.calls[0][1].instructions == SYSTEM_PROMPT
 
 
-def test_invalid_last_chance_submission_says_why():
-    calls = [Reply(tool_calls=[ToolCall(f"call-{i}", "echo", {"text": "x"})]) for i in range(2)]
-    llm = FakeLLM([*calls, submit("bad", {**ARGS, "status": "maybe"})])
-    with pytest.raises(MaxStepsExceeded, match="status"):
-        investigate("alert", llm=llm, tools=[echo_tool], max_steps=2)
-
-
-def test_a_tool_named_submit_answer_is_rejected():
-    clash = Tool("submit_answer", "user tool", {"type": "object"}, lambda: "x")
-    with pytest.raises(ValueError, match="submit_answer"):
-        investigate("alert", llm=FakeLLM([]), tools=[clash])
-
-
-def test_system_message_is_the_prompt_when_context_is_absent():
-    llm = FakeLLM([ECHO, submit()])
-    investigate("alert", llm=llm, tools=[echo_tool])
-    assert llm.calls[0][0][0] == {"role": "system", "content": SYSTEM_PROMPT}
-
-
-def test_context_is_appended_to_the_system_message():
-    llm = FakeLLM([ECHO, submit()])
-    investigate("alert", llm=llm, tools=[echo_tool], context="services: checkout, payments")
-    assert llm.calls[0][0][0]["content"] == (
+def test_context_is_appended_to_the_instructions():
+    model = Scripted([ECHO, submit()])
+    investigate("alert", model=model, context="services: checkout, payments")
+    assert model.calls[0][1].instructions == (
         f"{SYSTEM_PROMPT}\n\nAdditional context from the operator:\nservices: checkout, payments"
     )
 
 
-def test_empty_context_leaves_the_system_message_unchanged():
-    llm = FakeLLM([ECHO, submit()])
-    investigate("alert", llm=llm, tools=[echo_tool], context="")
-    assert llm.calls[0][0][0]["content"] == SYSTEM_PROMPT
+def test_empty_context_leaves_the_instructions_unchanged():
+    model = Scripted([ECHO, submit()])
+    investigate("alert", model=model, context="")
+    assert model.calls[0][1].instructions == SYSTEM_PROMPT
 
 
-def test_main_context_file_reaches_the_system_message(monkeypatch, tmp_path, capsys):
+def test_main_context_file_reaches_the_instructions(monkeypatch, tmp_path, capsys):
     path = tmp_path / "services.txt"
     path.write_text("services: checkout, payments\n", encoding="utf-8")
-    llm = FakeLLM([ECHO, submit(), ECHO, submit()])
-    monkeypatch.setattr("truesight.agent.llm_from_env", lambda: llm)
-    monkeypatch.setattr("truesight.__main__.tools_from_mcp", lambda url: [echo_tool])
-
+    model = Scripted([ECHO, submit()])
+    monkeypatch.setattr("truesight.agent.model_from_env", lambda: model)
     main(["truesight", "--context-file", str(path), "disk", "full"])
-    main(["truesight", "--mcp-url", "http://127.0.0.1:9/mcp", "--context-file", str(path), "x"])
-
-    assert len(llm.calls) == 4
-    for messages, _tools in llm.calls:
-        assert messages[0]["content"].endswith(
-            "Additional context from the operator:\nservices: checkout, payments\n"
-        )
-    assert capsys.readouterr().out.count('"summary": "disk filled by logs"') == 2
+    assert model.calls[0][1].instructions.endswith(
+        "Additional context from the operator:\nservices: checkout, payments"
+    )
+    assert json.loads(capsys.readouterr().out)["summary"] == "disk filled by logs"
 
 
 def test_main_prints_the_investigation(monkeypatch, capsys):
-    monkeypatch.setattr(
-        "truesight.__main__.investigate", lambda alert, tools=None, context=None: ANSWER
-    )
+    monkeypatch.setattr("truesight.__main__.investigate", lambda alert, **_: ANSWER)
     main(["truesight", "disk", "full"])
     printed = json.loads(capsys.readouterr().out)
     assert printed["location"] == {"kind": "resource", "address": "/var/log on db-1"}
     assert printed["evidence"] == [{"tool": "echo", "finding": "95%"}]
 
 
-def test_main_loads_tools_from_mcp_url(monkeypatch, capsys):
+def test_main_passes_every_mcp_url(monkeypatch, capsys):
     seen = {}
 
-    def fake_tools(url: str):
-        seen["url"] = url
-        return [echo_tool]
-
-    def fake_investigate(alert: str, tools=None, context=None):
-        seen["alert"] = alert
-        seen["tool"] = tools[0].name
+    def fake_investigate(alert, mcp_urls, **_):
+        seen.update(alert=alert, urls=mcp_urls)
         return ANSWER
 
-    monkeypatch.setattr("truesight.__main__.tools_from_mcp", fake_tools)
     monkeypatch.setattr("truesight.__main__.investigate", fake_investigate)
-    main(["truesight", "--mcp-url", "http://127.0.0.1:9/mcp", "disk", "full"])
-    assert seen == {"url": "http://127.0.0.1:9/mcp", "alert": "disk full", "tool": "echo"}
+    main(["truesight", "--mcp-url", "http://a/mcp", "--mcp-url", "http://b/mcp", "disk", "full"])
+    assert seen == {"alert": "disk full", "urls": ["http://a/mcp", "http://b/mcp"]}
     assert json.loads(capsys.readouterr().out)["status"] == "established"
 
 
-def test_evidence_from_a_tool_never_called_is_sent_back():
-    llm = FakeLLM([submit("unseen"), ECHO, submit()])
-    assert investigate("alert", llm=llm, tools=[echo_tool]) == ANSWER
-    sent_back = llm.calls[1][0][-1]
-    assert sent_back["tool_call_id"] == "unseen"
-    assert sent_back["content"].startswith("error: invalid answer: evidence.0.tool:")
-
-
-def test_last_chance_answer_is_checked_against_called_tools():
-    llm = FakeLLM([Reply(text="done"), submit()])
-    with pytest.raises(MaxStepsExceeded, match="evidence.0.tool"):
-        investigate("alert", llm=llm, tools=[echo_tool], max_steps=1)
+def test_env_model_is_deepseek_and_sends_reasoning_back(monkeypatch):
+    monkeypatch.setenv("TRUESIGHT_LLM_API_KEY", "k")
+    model = model_from_env()
+    assert isinstance(model._provider, DeepSeekProvider)
+    assert model.profile.get("openai_chat_thinking_field") == "reasoning_content"
+    assert model.profile.get("openai_chat_send_back_thinking_parts") == "field"
 
 
 def test_system_prompt_allows_not_established():

@@ -15,5 +15,6 @@ def test_package_imports_and_module_exits_zero():
     assert completed.returncode == 0
     assert (
         completed.stdout
-        == "usage: python -m truesight [--mcp-url URL] [--context-file PATH] ALERT\n"
+        == "usage: python -m truesight [--mcp-url URL]... [--context-file PATH] [--trace PATH] "
+        "ALERT\n"
     )

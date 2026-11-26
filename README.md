@@ -8,8 +8,8 @@ Eval data stays local; set `TRUESIGHT_BENCH_DIR` to a Cloud-OpsBench checkout.
 
 Python 3.12 and uv. From the repository root, run `uv sync`.
 
-The model is DeepSeek through the OpenAI-compatible API. Copy `.env.example`
-to `.env` and set:
+The agent runs on [Pydantic AI](https://pydantic.dev/docs/ai/). The model is DeepSeek
+through its OpenAI-compatible chat API. Copy `.env.example` to `.env` and set:
 
 - `TRUESIGHT_LLM_API_KEY` — required
 - `TRUESIGHT_LLM_BASE_URL` — optional, default `https://api.deepseek.com`
@@ -23,7 +23,9 @@ uv run --env-file .env python -m truesight "disk full on db-1"
 
 `--env-file` makes uv load the variables from `.env` (alternatively, export them in the shell). With no arguments the command prints usage and exits 0.
 
-To use tools from an MCP server over Streamable HTTP, pass its URL. Without `--mcp-url`, truesight keeps its built-in echo tool.
+To use tools from an MCP server over Streamable HTTP, pass its URL. Repeat `--mcp-url` for
+more servers; with more than one, each server's tools are prefixed `mcp1_`, `mcp2_`, … in the
+order given. Without `--mcp-url`, truesight keeps its built-in echo tool.
 
 ```bash
 uv run --env-file .env python -m truesight --mcp-url http://127.0.0.1:8000/mcp "disk full on db-1"
@@ -35,9 +37,14 @@ uv run --env-file .env python -m truesight --mcp-url http://127.0.0.1:8000/mcp "
 uv run --env-file .env python -m truesight --context-file services.txt "disk full on db-1"
 ```
 
-The agent finishes by calling its built-in `submit_answer` tool; the arguments are checked
-against a JSON schema and an invalid answer is sent back to the model to fix. The command
-prints the answer as indented JSON:
+`--trace PATH` writes the run's full message history (tool calls, results, reasoning) as JSON.
+
+The agent has 8 model requests. It finishes by calling its built-in `submit_answer` tool; the
+answer is checked against its schema, an `established` answer must rule something out, and
+every `evidence` and `ruled_out` entry must name a tool that ran. A failing answer is sent back
+to the model to fix. When the budget runs out, the model gets one last request offering only
+`submit_answer`; an answer that fails the checks there is returned as `not_established` with
+the reason in `summary`. The command prints the answer as indented JSON:
 
 - `status`: `established` or `not_established`
 - `summary`: one sentence, what is wrong and where
@@ -51,7 +58,7 @@ prints the answer as indented JSON:
 ## Tests and lint
 
 ```bash
-uv run ruff check
-uv run ruff format --check
+uv run ruff check src tests
+uv run ruff format --check src tests
 uv run pytest -q
 ```
