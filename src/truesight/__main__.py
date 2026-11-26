@@ -2,8 +2,6 @@ import argparse
 import json
 from pathlib import Path
 
-import pydantic_ai
-
 from truesight.agent import investigate
 
 
@@ -17,7 +15,6 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--trace", metavar="PATH", type=Path)
     parser.add_argument("alert", nargs="*")
     args = parser.parse_args(None if argv is None else argv[1:])
-    pydantic_ai.BANNER_ENABLED = False
     if not args.alert:
         parser.print_usage()
         return

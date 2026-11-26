@@ -3,8 +3,10 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
+import pydantic_ai
 from pydantic_ai import (
     Agent,
+    ModelMessagesTypeAdapter,
     ModelRequest,
     ModelResponse,
     ModelRetry,
@@ -25,6 +27,8 @@ from pydantic_ai.providers.deepseek import DeepSeekProvider
 
 from truesight.answer import Answer, answer_error
 from truesight.tools import echo_toolset
+
+pydantic_ai.BANNER_ENABLED = False
 
 SYSTEM_PROMPT = """\
 You are investigating a production incident. You have read-only tools connected to the systems
@@ -123,20 +127,32 @@ async def _investigate(alert, model, mcp_urls, max_steps, context, trace) -> Ans
             try:
                 result = await agent.run(alert, usage_limits=UsageLimits(request_limit=max_steps))
             except UsageLimitExceeded:
-                result = await _final_turn(model, list(messages), context, max_steps)
-    if trace is not None:
-        trace.write_bytes(result.all_messages_json())
+                result = await _final_turn(model, list(messages), context, max_steps, trace)
+            except Exception:
+                _write_trace(trace, messages)
+                raise
+    _write_trace(trace, result.all_messages())
     return result.output
 
 
-async def _final_turn(model, messages, context, max_steps):
+async def _final_turn(model, messages, context, max_steps, trace):
     agent = _agent(model, [], context, max_steps, final=True)
-    try:
-        return await agent.run(
-            OUT_OF_STEPS, message_history=messages, usage_limits=UsageLimits(request_limit=1)
-        )
-    except (UsageLimitExceeded, UnexpectedModelBehavior) as exc:
-        raise MaxStepsExceeded(f"no final answer after {max_steps} steps ({exc})") from exc
+    with capture_run_messages() as captured:
+        try:
+            return await agent.run(
+                OUT_OF_STEPS, message_history=messages, usage_limits=UsageLimits(request_limit=1)
+            )
+        except (UsageLimitExceeded, UnexpectedModelBehavior) as exc:
+            _write_trace(trace, captured)
+            raise MaxStepsExceeded(f"no final answer after {max_steps} steps ({exc})") from exc
+        except Exception:
+            _write_trace(trace, captured)
+            raise
+
+
+def _write_trace(trace: Path | None, messages) -> None:
+    if trace is not None:
+        trace.write_bytes(ModelMessagesTypeAdapter.dump_json(messages))
 
 
 def _toolsets(mcp_urls: Sequence[str]) -> list:
@@ -154,6 +170,7 @@ def _agent(model, toolsets, context, max_steps, final) -> Agent[None, Answer]:
         instructions = f"{SYSTEM_PROMPT}\n\nAdditional context from the operator:\n{context}"
     agent = Agent(
         model,
+        name="truesight",
         output_type=ToolOutput(Answer, name=SUBMIT_ANSWER, description=SUBMIT_DESCRIPTION),
         instructions=instructions,
         toolsets=toolsets,
